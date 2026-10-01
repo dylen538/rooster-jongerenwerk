@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Openingstijden Jongerenwerk</title>
+  <style>
+    :root {
+      --primary: #4F46E5;
+      --bg: #F3F4F6;
+      --card-bg: #FFFFFF;
+      --text: #1F2937;
+      --text-muted: #6B7280;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      padding: 20px 16px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    header h1 {
+      font-size: 1.6rem;
+      color: var(--primary);
+      margin-bottom: 6px;
+    }
+
+    header p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .rooster-container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+      border-left: 6px solid var(--primary);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .locatie {
+      font-weight: 700;
+      font-size: 1.15rem;
+    }
+
+    .datum {
+      background-color: #EEF2FF;
+      color: var(--primary);
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    .tijd {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #374151;
+    }
+
+    .details {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+      border-top: 1px solid #E5E7EB;
+      padding-top: 10px;
+      margin-top: 10px;
+    }
+
+    .details span {
+      display: block;
+      margin-top: 4px;
+    }
+
+    .loading, .empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+      background: white;
+      border-radius: 12px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>📍 Openingstijden Jongerenwerk</h1>
+    <p>Bekijk hier wanneer we open zijn en wat er te doen is!</p>
+  </header>
+
+  <div id="rooster" class="rooster-container">
+    <div class="loading">Laden van openingstijden...</div>
+  </div>
+
+  <script>
+    const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ7dpa_av6CBOlv3RALNPe644luc0mZksPcsFYkqFzB46EFXZ5Nry8Kh_IUJwXUZf7NmJCVy7R9g6TV/pub?output=csv';
+
+    async function laadRooster() {
+      try {
+        const response = await fetch(CSV_URL);
+        const data = await response.text();
+        const rows = parseCSV(data);
+        
+        // Sla de kopregel over
+        const entries = rows.slice(1);
+        const roosterContainer = document.getElementById('rooster');
+
+        if (entries.length === 0) {
+          roosterContainer.innerHTML = '<div class="empty">Er zijn momenteel geen openingstijden gepland.</div>';
+          return;
+        }
+
+        roosterContainer.innerHTML = '';
+
+        entries.forEach(row => {
+          // Velden uit de Sheet: Timestamp, Locatie, Datum, Starttijd, Sluitingstijd, Activiteit, Begeleiders
+          const [timestamp, locatie, datum, starttijd, sluitingstijd, activiteit, begeleiders] = row;
+
+          if (!locatie || !datum) return;
+
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.innerHTML = `
+            <div class="card-header">
+              <div class="locatie">${locatie}</div>
+              <div class="datum">📅 ${datum}</div>
+            </div>
+            <div class="tijd">⏰ ${starttijd || ''} - ${sluitingstijd || ''} uur</div>
+            ${(activiteit || begeleiders) ? `
+              <div class="details">
+                ${activiteit ? `<div><strong>Activiteit:</strong> ${activiteit}</div>` : ''}
+                ${begeleiders ? `<span><strong>Aanwezig:</strong> ${begeleiders}</span>` : ''}
+              </div>
+            ` : ''}
+          `;
+          roosterContainer.appendChild(card);
+        });
+
+      } catch (error) {
+        console.error('Fout bij laden:', error);
+        document.getElementById('rooster').innerHTML = '<div class="empty">Kon de openingstijden niet laden. Probeer later opnieuw.</div>';
+      }
+    }
+
+    // Eenvoudige CSV parser die rekening houdt met komma's en quotes
+    function parseCSV(text) {
+      const lines = text.split('\n');
+      return lines.map(line => {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            result.push(current.trim().replace(/^"|"$/g, ''));
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        result.push(current.trim().replace(/^"|"$/g, ''));
+        return result;
+      }).filter(row => row.some(cell => cell.length > 0));
+    }
+
+    laadRooster();
+  </script>
+</body>
+</html>
