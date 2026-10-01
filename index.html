@@ -62,13 +62,25 @@
     .card-header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
       margin-bottom: 8px;
+    }
+
+    .locatie-box {
+      display: flex;
+      flex-direction: column;
     }
 
     .locatie {
       font-weight: 700;
       font-size: 1.15rem;
+    }
+
+    .type-avond {
+      font-size: 0.85rem;
+      color: #4F46E5;
+      font-weight: 600;
+      margin-top: 2px;
     }
 
     .datum {
@@ -78,6 +90,7 @@
       font-weight: 600;
       padding: 4px 10px;
       border-radius: 20px;
+      white-space: nowrap;
     }
 
     .tijd {
@@ -96,8 +109,7 @@
       margin-top: 10px;
     }
 
-    .details span {
-      display: block;
+    .details div {
       margin-top: 4px;
     }
 
@@ -172,14 +184,14 @@
 
   <footer>
     <div id="last-checked" class="last-checked">Gegevens worden geladen...</div>
-    <div>&copy; <span id="year"></span> dylen538.nl </div>
-    <div class="version">Versie v1.2.0</div>
+    <div>&copy; <span id="year"></span> Jongerenwerk. Alle rechten voorbehouden.</div>
+    <div class="version">Versie v1.3.0</div>
   </footer>
 
   <script>
-    const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ7dpa_av6CBOlv3RALNPe644luc0mZksPcsFYkqFzB46EFXZ5Nry8Kh_IUJwXUZf7NmJCVy7R9g6TV/pub?output=csv';
+    const CSV_BASE_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ7dpa_av6CBOlv3RALNPe644luc0mZksPcsFYkqFzB46EFXZ5Nry8Kh_IUJwXUZf7NmJCVy7R9g6TV/pub?output=csv';
+    const CSV_URL = CSV_BASE_URL + '&cachebust=' + new Date().getTime();
 
-    // Vul automatisch het huidige jaar in voor copyright
     document.getElementById('year').textContent = new Date().getFullYear();
 
     async function laadRooster() {
@@ -191,7 +203,6 @@
         const entries = rows.slice(1);
         const roosterContainer = document.getElementById('rooster');
 
-        // Update 'Laatst gecontroleerd' timestamp
         const nu = new Date();
         const tijdStr = nu.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
         const datumStr = nu.toLocaleDateString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -209,19 +220,28 @@
         vandaag.setHours(0, 0, 0, 0);
 
         entries.forEach(row => {
-          // Velden: Timestamp, Locatie, Datum, Starttijd, Sluitingstijd, Activiteit, Begeleiders, Status
-          const [timestamp, locatie, datum, starttijd, sluitingstijd, activiteit, begeleiders, status] = row;
+          const [
+            timestamp, 
+            locatie, locatieOverige, 
+            typeAvond, typeAvondOverige, 
+            datum, starttijd, sluitingstijd, 
+            activiteit, activiteitOverige, 
+            begeleiders, status
+          ] = row;
 
           if (!locatie || !datum) return;
 
           const datumParsed = parseDatum(datum);
           
-          // Verberg verlopen datums
           if (datumParsed && datumParsed < vandaag) {
             return; 
           }
 
           aantalZichtbaar++;
+
+          const eindLocatie = (locatie && locatie.toLowerCase().includes('overige') && locatieOverige) ? locatieOverige : locatie;
+          const eindTypeAvond = (typeAvond && typeAvond.toLowerCase().includes('overige') && typeAvondOverige) ? typeAvondOverige : typeAvond;
+          const eindActiviteit = (activiteit && activiteit.toLowerCase().includes('overige') && activiteitOverige) ? activiteitOverige : activiteit;
 
           const isGeannuleerd = status && status.toLowerCase().includes('geannuleerd');
 
@@ -235,7 +255,10 @@
 
           card.innerHTML = `
             <div class="card-header">
-              <div class="locatie">${locatie}</div>
+              <div class="locatie-box">
+                <div class="locatie">${eindLocatie}</div>
+                ${eindTypeAvond ? `<div class="type-avond">🌙 ${eindTypeAvond}</div>` : ''}
+              </div>
               <div class="datum" style="${isGeannuleerd ? 'background-color: #FEE2E2; color: #DC2626;' : ''}">
                 ${isGeannuleerd ? '❌ GEANNULEERD' : `📅 ${datum}`}
               </div>
@@ -245,16 +268,16 @@
               ⏰ ${starttijd || ''} - ${sluitingstijd || ''} uur
             </div>
 
-            ${(activiteit || begeleiders) ? `
+            ${(eindActiviteit || begeleiders) ? `
               <div class="details">
-                ${activiteit ? `<div><strong>Activiteit:</strong> ${activiteit}</div>` : ''}
-                ${begeleiders ? `<span><strong>Aanwezig:</strong> ${begeleiders}</span>` : ''}
+                ${eindActiviteit ? `<div><strong>Activiteit:</strong> ${eindActiviteit}</div>` : ''}
+                ${begeleiders ? `<div><strong>Aanwezig:</strong> ${begeleiders}</div>` : ''}
               </div>
             ` : ''}
 
             ${!isGeannuleerd ? `
               <div class="card-actions">
-                <button class="btn-ics" onclick="downloadICS('${locatie}', '${datum}', '${starttijd}', '${sluitingstijd}', '${activiteit || 'Openingstijd Jongerenwerk'}')">
+                <button class="btn-ics" onclick="downloadICS('${eindLocatie}', '${datum}', '${starttijd}', '${sluitingstijd}', '${eindTypeAvond \vert{}\vert{} 'Openingstijd'} -${eindActiviteit || 'Jongerenwerk'}')">
                   📅 Toevoegen aan agenda
                 </button>
               </div>
@@ -273,7 +296,6 @@
       }
     }
 
-    // Functie voor de .ics Agenda Downloader
     function downloadICS(locatie, datumStr, starttijd, sluitingstijd, titel) {
       const d = parseDatum(datumStr);
       if (!d) {
