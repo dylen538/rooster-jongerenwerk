@@ -7,6 +7,7 @@
   <style>
     :root {
       --primary: #4F46E5;
+      --primary-hover: #4338CA;
       --bg: #F3F4F6;
       --card-bg: #FFFFFF;
       --text: #1F2937;
@@ -21,6 +22,9 @@
       padding: 20px 16px;
       max-width: 600px;
       margin: 0 auto;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
 
     header {
@@ -43,6 +47,7 @@
       display: flex;
       flex-direction: column;
       gap: 16px;
+      flex: 1;
     }
 
     .card {
@@ -51,6 +56,7 @@
       padding: 18px;
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
       border-left: 6px solid var(--primary);
+      transition: all 0.2s ease;
     }
 
     .card-header {
@@ -95,12 +101,61 @@
       margin-top: 4px;
     }
 
+    .card-actions {
+      margin-top: 12px;
+      border-top: 1px dashed #E5E7EB;
+      padding-top: 10px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .btn-ics {
+      background-color: #EEF2FF;
+      color: var(--primary);
+      border: 1px solid #C7D2FE;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background-color 0.2s;
+    }
+
+    .btn-ics:hover {
+      background-color: #E0E7FF;
+    }
+
     .loading, .empty {
       text-align: center;
       padding: 40px 20px;
       color: var(--text-muted);
       background: white;
       border-radius: 12px;
+    }
+
+    footer {
+      margin-top: 30px;
+      padding-top: 16px;
+      border-top: 1px solid #E5E7EB;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      line-height: 1.6;
+    }
+
+    .last-checked {
+      font-weight: 500;
+      color: #4B5563;
+      margin-bottom: 6px;
+    }
+
+    .version {
+      font-size: 0.75rem;
+      color: #9CA3AF;
+      margin-top: 4px;
     }
   </style>
 </head>
@@ -115,8 +170,17 @@
     <div class="loading">Laden van openingstijden...</div>
   </div>
 
+  <footer>
+    <div id="last-checked" class="last-checked">Gegevens worden geladen...</div>
+    <div>&copy; <span id="year"></span> dylen538.nl </div>
+    <div class="version">Versie v1.2.0</div>
+  </footer>
+
   <script>
     const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ7dpa_av6CBOlv3RALNPe644luc0mZksPcsFYkqFzB46EFXZ5Nry8Kh_IUJwXUZf7NmJCVy7R9g6TV/pub?output=csv';
+
+    // Vul automatisch het huidige jaar in voor copyright
+    document.getElementById('year').textContent = new Date().getFullYear();
 
     async function laadRooster() {
       try {
@@ -124,9 +188,14 @@
         const data = await response.text();
         const rows = parseCSV(data);
         
-        // Sla de kopregel over
         const entries = rows.slice(1);
         const roosterContainer = document.getElementById('rooster');
+
+        // Update 'Laatst gecontroleerd' timestamp
+        const nu = new Date();
+        const tijdStr = nu.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+        const datumStr = nu.toLocaleDateString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        document.getElementById('last-checked').textContent = `🔄 Laatst gecontroleerd: ${datumStr} om ${tijdStr} uur`;
 
         if (entries.length === 0) {
           roosterContainer.innerHTML = '<div class="empty">Er zijn momenteel geen openingstijden gepland.</div>';
@@ -134,30 +203,69 @@
         }
 
         roosterContainer.innerHTML = '';
+        let aantalZichtbaar = 0;
+
+        const vandaag = new Date();
+        vandaag.setHours(0, 0, 0, 0);
 
         entries.forEach(row => {
-          // Velden uit de Sheet: Timestamp, Locatie, Datum, Starttijd, Sluitingstijd, Activiteit, Begeleiders
-          const [timestamp, locatie, datum, starttijd, sluitingstijd, activiteit, begeleiders] = row;
+          // Velden: Timestamp, Locatie, Datum, Starttijd, Sluitingstijd, Activiteit, Begeleiders, Status
+          const [timestamp, locatie, datum, starttijd, sluitingstijd, activiteit, begeleiders, status] = row;
 
           if (!locatie || !datum) return;
 
+          const datumParsed = parseDatum(datum);
+          
+          // Verberg verlopen datums
+          if (datumParsed && datumParsed < vandaag) {
+            return; 
+          }
+
+          aantalZichtbaar++;
+
+          const isGeannuleerd = status && status.toLowerCase().includes('geannuleerd');
+
           const card = document.createElement('div');
           card.className = 'card';
+          
+          if (isGeannuleerd) {
+            card.style.borderLeftColor = '#EF4444';
+            card.style.opacity = '0.85';
+          }
+
           card.innerHTML = `
             <div class="card-header">
               <div class="locatie">${locatie}</div>
-              <div class="datum">📅 ${datum}</div>
+              <div class="datum" style="${isGeannuleerd ? 'background-color: #FEE2E2; color: #DC2626;' : ''}">
+                ${isGeannuleerd ? '❌ GEANNULEERD' : `📅 ${datum}`}
+              </div>
             </div>
-            <div class="tijd">⏰ ${starttijd || ''} - ${sluitingstijd || ''} uur</div>
+            
+            <div class="tijd" style="${isGeannuleerd ? 'text-decoration: line-through; color: #9CA3AF;' : ''}">
+              ⏰ ${starttijd || ''} - ${sluitingstijd || ''} uur
+            </div>
+
             ${(activiteit || begeleiders) ? `
               <div class="details">
                 ${activiteit ? `<div><strong>Activiteit:</strong> ${activiteit}</div>` : ''}
                 ${begeleiders ? `<span><strong>Aanwezig:</strong> ${begeleiders}</span>` : ''}
               </div>
             ` : ''}
+
+            ${!isGeannuleerd ? `
+              <div class="card-actions">
+                <button class="btn-ics" onclick="downloadICS('${locatie}', '${datum}', '${starttijd}', '${sluitingstijd}', '${activiteit || 'Openingstijd Jongerenwerk'}')">
+                  📅 Toevoegen aan agenda
+                </button>
+              </div>
+            ` : ''}
           `;
           roosterContainer.appendChild(card);
         });
+
+        if (aantalZichtbaar === 0) {
+          roosterContainer.innerHTML = '<div class="empty">Er zijn momenteel geen geplande openingstijden voor de komende periode.</div>';
+        }
 
       } catch (error) {
         console.error('Fout bij laden:', error);
@@ -165,7 +273,60 @@
       }
     }
 
-    // Eenvoudige CSV parser die rekening houdt met komma's en quotes
+    // Functie voor de .ics Agenda Downloader
+    function downloadICS(locatie, datumStr, starttijd, sluitingstijd, titel) {
+      const d = parseDatum(datumStr);
+      if (!d) {
+        alert('Kan datum niet verwerken');
+        return;
+      }
+
+      const startParts = (starttijd || '12:00').split(':');
+      const eindParts = (sluitingstijd || '17:00').split(':');
+
+      const startEvent = new Date(d.getFullYear(), d.getMonth(), d.getDate(), parseInt(startParts[0]), parseInt(startParts[1]));
+      const endEvent = new Date(d.getFullYear(), d.getMonth(), d.getDate(), parseInt(eindParts[0]), parseInt(eindParts[1]));
+
+      function formatICSDate(date) {
+        return date.toISOString().replace(/-|:|\.\d+/g, '');
+      }
+
+      const icsData = 
+`BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Jongerenwerk//RoosterApp//NL
+BEGIN:VEVENT
+SUMMARY:${titel} (${locatie})
+LOCATION:${locatie}
+DTSTART:${formatICSDate(startEvent)}
+DTEND:${formatICSDate(endEvent)}
+DESCRIPTION:Openingstijden Jongerenwerk op ${locatie}.
+END:VEVENT
+END:VCALENDAR`;
+
+      const blob = new Blob([icsData], { type: 'text/calendar;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = window.URL.createObjectURL(blob);
+      link.setAttribute('download', `openingstijd-${locatie.toLowerCase().replace(/\s+/g, '-')}.ics`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function parseDatum(str) {
+      if (!str) return null;
+      const parts = str.split(/[-/.]/);
+      if (parts.length === 3) {
+        if (parts[0].length === 2 && parts[2].length === 4) {
+          return new Date(parts[2], parts[1] - 1, parts[0]);
+        }
+        if (parts[0].length === 4) {
+          return new Date(parts[0], parts[1] - 1, parts[2]);
+        }
+      }
+      return new Date(str);
+    }
+
     function parseCSV(text) {
       const lines = text.split('\n');
       return lines.map(line => {
