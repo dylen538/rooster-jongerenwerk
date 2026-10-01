@@ -27,61 +27,25 @@
       flex-direction: column;
     }
 
-    header {
-      text-align: center;
-      margin-bottom: 24px;
-    }
+    header { text-align: center; margin-bottom: 24px; }
+    header h1 { font-size: 1.6rem; color: var(--primary); margin-bottom: 6px; }
+    header p { color: var(--text-muted); font-size: 0.95rem; }
 
-    header h1 {
-      font-size: 1.6rem;
-      color: var(--primary);
-      margin-bottom: 6px;
-    }
-
-    header p {
-      color: var(--text-muted);
-      font-size: 0.95rem;
-    }
-
-    .rooster-container {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      flex: 1;
-    }
+    .rooster-container { display: flex; flex-direction: column; gap: 16px; flex: 1; }
 
     .card {
       background: var(--card-bg);
       border-radius: 12px;
       padding: 18px;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
       border-left: 6px solid var(--primary);
       transition: all 0.2s ease;
     }
 
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 8px;
-    }
-
-    .locatie-box {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .locatie {
-      font-weight: 700;
-      font-size: 1.15rem;
-    }
-
-    .type-avond {
-      font-size: 0.85rem;
-      color: #4F46E5;
-      font-weight: 600;
-      margin-top: 2px;
-    }
+    .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+    .locatie-box { display: flex; flex-direction: column; }
+    .locatie { font-weight: 700; font-size: 1.15rem; }
+    .type-avond { font-size: 0.85rem; color: #4F46E5; font-weight: 600; margin-top: 2px; }
 
     .datum {
       background-color: #EEF2FF;
@@ -93,12 +57,7 @@
       white-space: nowrap;
     }
 
-    .tijd {
-      font-size: 1.05rem;
-      font-weight: 600;
-      margin-bottom: 12px;
-      color: #374151;
-    }
+    .tijd { font-size: 1.05rem; font-weight: 600; margin-bottom: 12px; color: #374151; }
 
     .details {
       font-size: 0.9rem;
@@ -107,10 +66,6 @@
       border-top: 1px solid #E5E7EB;
       padding-top: 10px;
       margin-top: 10px;
-    }
-
-    .details div {
-      margin-top: 4px;
     }
 
     .card-actions {
@@ -130,23 +85,16 @@
       font-size: 0.82rem;
       font-weight: 600;
       cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      transition: background-color 0.2s;
     }
 
-    .btn-ics:hover {
-      background-color: #E0E7FF;
-    }
-
-    .loading, .empty {
+    .loading, .empty, .error {
       text-align: center;
       padding: 40px 20px;
       color: var(--text-muted);
       background: white;
       border-radius: 12px;
     }
+    .error { color: #DC2626; background: #FEE2E2; }
 
     footer {
       margin-top: 30px;
@@ -155,20 +103,10 @@
       text-align: center;
       color: var(--text-muted);
       font-size: 0.8rem;
-      line-height: 1.6;
     }
 
-    .last-checked {
-      font-weight: 500;
-      color: #4B5563;
-      margin-bottom: 6px;
-    }
-
-    .version {
-      font-size: 0.75rem;
-      color: #9CA3AF;
-      margin-top: 4px;
-    }
+    .last-checked { font-weight: 500; color: #4B5563; margin-bottom: 6px; }
+    .version { font-size: 0.75rem; color: #9CA3AF; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -184,8 +122,8 @@
 
   <footer>
     <div id="last-checked" class="last-checked">Gegevens worden geladen...</div>
-    <div>&copy; <span id="year"></span> Jongerenwerk. Alle rechten voorbehouden.</div>
-    <div class="version">Versie v1.3.0</div>
+    <div>&copy; <span id="year"></span> dylen538.nl Alle rechten voorbehouden.</div>
+    <div class="version">Versie v1.3.1</div>
   </footer>
 
   <script>
@@ -195,13 +133,15 @@
     document.getElementById('year').textContent = new Date().getFullYear();
 
     async function laadRooster() {
+      const roosterContainer = document.getElementById('rooster');
       try {
         const response = await fetch(CSV_URL);
+        if (!response.ok) throw new Error('Kon Google Sheet niet ophalen');
+        
         const data = await response.text();
         const rows = parseCSV(data);
         
         const entries = rows.slice(1);
-        const roosterContainer = document.getElementById('rooster');
 
         const nu = new Date();
         const tijdStr = nu.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
@@ -219,20 +159,28 @@
         const vandaag = new Date();
         vandaag.setHours(0, 0, 0, 0);
 
-        entries.forEach(row => {
-          const [
-            timestamp, 
-            locatie, locatieOverige, 
-            typeAvond, typeAvondOverige, 
-            datum, starttijd, sluitingstijd, 
-            activiteit, activiteitOverige, 
-            begeleiders, status
-          ] = row;
+        entries.forEach((row, idx) => {
+          if (row.length < 2) return;
 
-          if (!locatie || !datum) return;
+          // Mapping op basis van positie
+          const timestamp = row[0] || '';
+          const locatie = row[1] || '';
+          const locatieOverige = row[2] || '';
+          const typeAvond = row[3] || '';
+          const typeAvondOverige = row[4] || '';
+          const datum = row[5] || '';
+          const starttijd = row[6] || '';
+          const sluitingstijd = row[7] || '';
+          const activiteit = row[8] || '';
+          const activiteitOverige = row[9] || '';
+          const begeleiders = row[10] || '';
+          const status = row[11] || '';
+
+          if (!locatie && !datum) return;
 
           const datumParsed = parseDatum(datum);
           
+          // Als de datum wel gelezen kan worden en in het verleden ligt, sla over
           if (datumParsed && datumParsed < vandaag) {
             return; 
           }
@@ -256,16 +204,16 @@
           card.innerHTML = `
             <div class="card-header">
               <div class="locatie-box">
-                <div class="locatie">${eindLocatie}</div>
+                <div class="locatie">${eindLocatie || 'Onbekende locatie'}</div>
                 ${eindTypeAvond ? `<div class="type-avond">🌙 ${eindTypeAvond}</div>` : ''}
               </div>
               <div class="datum" style="${isGeannuleerd ? 'background-color: #FEE2E2; color: #DC2626;' : ''}">
-                ${isGeannuleerd ? '❌ GEANNULEERD' : `📅 ${datum}`}
+                ${isGeannuleerd ? '❌ GEANNULEERD' : `📅 ${datum || 'Datum onbekend'}`}
               </div>
             </div>
             
             <div class="tijd" style="${isGeannuleerd ? 'text-decoration: line-through; color: #9CA3AF;' : ''}">
-              ⏰ ${starttijd || ''} - ${sluitingstijd || ''} uur
+              ⏰ ${starttijd || ''} ${sluitingstijd ? `- ${sluitingstijd} uur` : ''}
             </div>
 
             ${(eindActiviteit || begeleiders) ? `
@@ -275,9 +223,9 @@
               </div>
             ` : ''}
 
-            ${!isGeannuleerd ? `
+            ${(!isGeannuleerd && datum) ? `
               <div class="card-actions">
-                <button class="btn-ics" onclick="downloadICS('${eindLocatie}', '${datum}', '${starttijd}', '${sluitingstijd}', '${eindTypeAvond \vert{}\vert{} 'Openingstijd'} -${eindActiviteit || 'Jongerenwerk'}')">
+                <button class="btn-ics" onclick="downloadICS('${eindLocatie}', '${datum}', '${starttijd}', '${sluitingstijd}', '${eindTypeAvond || 'Openingstijd'}')">
                   📅 Toevoegen aan agenda
                 </button>
               </div>
@@ -292,7 +240,7 @@
 
       } catch (error) {
         console.error('Fout bij laden:', error);
-        document.getElementById('rooster').innerHTML = '<div class="empty">Kon de openingstijden niet laden. Probeer later opnieuw.</div>';
+        roosterContainer.innerHTML = '<div class="error">⚠️ Kon de gegevens niet laden. Controleer de Google Sheet of probeer later opnieuw.</div>';
       }
     }
 
@@ -306,8 +254,8 @@
       const startParts = (starttijd || '12:00').split(':');
       const eindParts = (sluitingstijd || '17:00').split(':');
 
-      const startEvent = new Date(d.getFullYear(), d.getMonth(), d.getDate(), parseInt(startParts[0]), parseInt(startParts[1]));
-      const endEvent = new Date(d.getFullYear(), d.getMonth(), d.getDate(), parseInt(eindParts[0]), parseInt(eindParts[1]));
+      const startEvent = new Date(d.getFullYear(), d.getMonth(), d.getDate(), parseInt(startParts[0] || 12), parseInt(startParts[1] || 0));
+      const endEvent = new Date(d.getFullYear(), d.getMonth(), d.getDate(), parseInt(eindParts[0] || 17), parseInt(eindParts[1] || 0));
 
       function formatICSDate(date) {
         return date.toISOString().replace(/-|:|\.\d+/g, '');
@@ -329,7 +277,7 @@ END:VCALENDAR`;
       const blob = new Blob([icsData], { type: 'text/calendar;charset=utf-8;' });
       const link = document.createElement('a');
       link.href = window.URL.createObjectURL(blob);
-      link.setAttribute('download', `openingstijd-${locatie.toLowerCase().replace(/\s+/g, '-')}.ics`);
+      link.setAttribute('download', `openingstijd.ics`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -346,7 +294,8 @@ END:VCALENDAR`;
           return new Date(parts[0], parts[1] - 1, parts[2]);
         }
       }
-      return new Date(str);
+      const d = new Date(str);
+      return isNaN(d.getTime()) ? null : d;
     }
 
     function parseCSV(text) {
